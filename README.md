@@ -87,30 +87,36 @@ Obrigado pelo trabalho até aqui — os desafios foram reais, mas cada um deles 
 
 ```bash
 javac -cp "lib/*;." *.java
-**ANS Simples — Teste 3 (unificado)**
+ANS Simples — Guia completo e didático
 
-Resumo
--------
-Conjunto de utilitários Java e scripts SQL para consolidar, validar, enriquecer e agregar dados de despesas (CSV) obtidos da ANS. Este README unifica a documentação do projeto e descreve passos reproduzíveis para rodar a análise localmente.
+Visão geral
+-----------
+Projeto: utilitários Java para consolidar, validar, enriquecer e agregar dados de despesas em CSV (fontes ANS). Este documento explica passo a passo como reproduzir a pipeline localmente, descreve decisões técnicas, problemas enfrentados e soluções adotadas. É escrito para iniciantes e estudantes.
+
+Por que Java (versão simples) e não Spring
+-----------------------------------------
+- Simplicidade: a solução visa ser fácil de compilar e executar sem dependências complexas. Usar classes Java simples evita a necessidade de configurar Maven/Gradle e reduz o atrito para avaliadores.
+- Menos dependências: sem Spring não é preciso configurar injeção, contexto, servidor web ou empacotamento — apenas `javac` e `java`.
+- Foco no problema: o objetivo é processar arquivos grandes e aplicar regras de transformação; isso é feito de forma direta com I/O stream e coleções Java, que são suficientes para um protótipo.
 
 Estrutura do repositório
--------------------------
-- `*.java` : fontes Java (consolidador, transformações, enriquecimento, utilitários)
-- `csvs/` : CSVs de entrada de exemplo (pequenos)
-- `dados_ans/` : local esperado para `Relatorio_cadop.csv` (cadastro de operadoras)
-- `sql/` : DDL, scripts de importação, queries de análise e ferramentas auxiliares
-- `sql/tools/` : scripts para validação de export (PowerShell / Bash / Python)
-- `sample/` : exemplos pequenos para testes rápidos
+------------------------
+- `*.java` — código-fonte: `AnsCorreto`, `Agrupador`, `EnriquecerOperadoras`, `UnmatchedResolver`, utilitários.
+- `csvs/` — CSVs de teste/exemplo pequeno.
+- `dados_ans/` — local sugerido para `Relatorio_cadop.csv` (cadastro de operadoras).
+- `sql/` — scripts SQL: DDL, import helpers, transformações e queries analíticas.
+- `sql/tools/` — scripts auxiliares para validar/checar CSVs exportados.
+- `sample/` — amostras pequenas para testes rápidos.
 
 Pré-requisitos
 --------------
-- Java 17+ instalado
-- (Opcional) PostgreSQL local se quiser usar os scripts `sql/*.sql` com `psql`
-- DBeaver recomendado para import via GUI (Import Data)
+- Java 17 ou superior.
+- (Opcional) PostgreSQL local para executar os scripts SQL.
+- DBeaver (recomendado) para importar CSVs via GUI e exportar resultados.
 
-Rápido — testar com o sample
----------------------------
-1. Compilar fontes:
+Teste rápido com a amostra
+--------------------------
+1. Compilar os fontes:
 
 ```bash
 javac -cp "lib/*;." *.java
@@ -122,72 +128,134 @@ javac -cp "lib/*;." *.java
 java AnsCorreto
 ```
 
-Passos completos (pipeline local reproducível)
---------------------------------------------
-1) Preparar banco (opcional, se usar SQL)
+Resultado: arquivo `consolidado_despesas.csv` no diretório do projeto.
 
-- Em PostgreSQL execute `sql/01_create_tables.sql` para criar `operadoras` e `despesas`.
-
-2) Importar CSVs (DBeaver recomendado)
-
-- Use Import Data do DBeaver para carregar:
-	- `csvs/consolidado_sample.csv` → tabela de staging `consolidado_tmp`
-	- `csvs/Relatorio_cadop.csv` → tabela `operadoras` (ou `dados_ans/Relatorio_cadop.csv` via script)
-- Atenção ao mapear colunas — DBeaver pode renomear colunas automaticamente; confira as colunas `_raw` e ajuste antes de inserir.
-
-3) Normalizar e popular `despesas`
-
-- Execute os UPDATEs e INSERTs em `sql/02_import_data.sql` (ou use os blocos em `sql/teste3_pg.sql`) para:
-	- normalizar `CNPJ` (remover não-dígitos),
-	- converter `valor` (`replace(',', '.')` → cast numeric),
-	- filtrar contas de despesas (prefixos) e inserir em `despesas`.
-
-4) Análises
-
-- Abra `sql/03_query_analysis.sql` ou `sql/03_query_analysis_simple.sql` e execute os blocos de consulta.
-- Exporte resultados via DBeaver (Export Result → CSV) para `sql/results/`.
-
-5) Validar exportações
-
-- Use os scripts em `sql/tools/` para checar formato e consistência dos CSVs exportados.
-
-Principais decisões e problemas conhecidos
-----------------------------------------
-- Falta de `psql`/Docker no ambiente do assistente: os scripts foram preparados para execução local.
-- Import via GUI pode requerer mapeamento manual de colunas.
-- CNPJs e campos numéricos precisaram de normalização; o pipeline preserva linhas inválidas em arquivos de auditoria para revisão manual.
-
-Onde estão os scripts importantes
+Pipeline completa (passo a passo)
 --------------------------------
-- `sql/01_create_tables.sql` — DDL mínimo
-- `sql/02_import_data*.sql` — exemplos e helpers para importar/transformar
-- `sql/teste3_pg.sql` — script completo com seções de transformação
-- `sql/03_query_analysis*.sql` — queries analíticas (top, por trimestre, por UF)
-- `sql/tools/` — validadores de export (PowerShell/Bash/Python)
+1) Preparar o ambiente PostgreSQL
 
-Limpeza de docs
----------------
-Removi READMEs redundantes e consolidei a documentação principal neste `README.md`. Se quiser uma versão mais curta para avaliadores, eu gero uma `README_SUMMARY.md`.
+- Criar banco (exemplo):
 
-Commits e push
---------------
-Fiz alterações locais nesta branch; se quiser que eu dê push, confirme e eu realizo o commit + push (ou já posso empurrar as mudanças se preferir que eu use as credenciais locais).
+```bash
+createdb ans_teste
+```
 
-Próximos passos sugeridos
+- Conectar e executar o DDL (cria `operadoras` e `despesas`):
+
+```bash
+psql -d ans_teste -f sql/01_create_tables.sql
+```
+
+2) Importar CSVs com DBeaver (GUI) — passo a passo
+
+- Abra DBeaver e conecte ao seu banco PostgreSQL.
+- Clique com o direito na conexão → Tools → Data Transfer → Import Data (ou use o menu de importação de tabelas).
+- Selecione o arquivo CSV (`csvs/consolidado_sample.csv`) e escolha criar/usar a tabela `consolidado_tmp` como staging.
+- Mapeie colunas: verifique nomes, tipos e encoding (`UTF-8`). Atenção: DBeaver pode renomear colunas; mantenha as colunas `_raw` intactas para debug.
+- Repita para `csvs/Relatorio_cadop.csv` → tabela `operadoras`.
+
+3) Normalização e carga para `despesas`
+
+- Principais operações necessárias (exemplos):
+	- Normalizar CNPJ: `regexp_replace(cnpj, '[^0-9]', '', 'g')`.
+	- Converter valores: `replace(valor_raw, ',', '.')::numeric`.
+	- Filtrar contas de despesa por prefixo (ex.: `cod_conta LIKE '41%'`).
+
+- Execute os blocos SQL de transformação em `sql/02_import_data.sql` ou em `sql/teste3_pg.sql`.
+
+Detalhes técnicos importantes
+----------------------------
+- Encoding: use `UTF-8` ao importar/exportar para evitar problemas com acentos.
+- Delimitador: preferir `;` para compatibilidade com formatos PT-BR.
+- Campos CSV com `;` internos: use leitor robusto (OpenCSV em Java) ou o importador do DBeaver que respeita aspas.
+- Linhas com valores inválidos (ex.: valor não numérico, CNPJ mal formatado) devem ser preservadas em uma tabela ou arquivo de auditoria para revisão manual.
+
+Problemas comuns e como resolvê-los
+----------------------------------
+1) ERRO de FK ao inserir em `despesas` — motivo: CNPJs em staging não existem em `operadoras`.
+	 Soluções:
+	 - Inserir placeholders mínimos em `operadoras` para os CNPJs faltantes (id + nome genérico).
+	 - Alterar o INSERT para `despesas` usando `JOIN` com `operadoras` (insere apenas matches).
+	 - Remover temporariamente a constraint FK, inserir, depois corrigir e recriar a constraint (não recomendado sem validação).
+
+2) Colunas renomeadas no import do DBeaver
+	 - Verifique o mapeamento no preview e ajuste os nomes antes do commit do import.
+	 - Se já importado, use UPDATEs para copiar do `_raw` para as colunas esperadas.
+
+3) Valores numéricos com vírgula
+	 - Antes do cast para numeric, aplique `replace(valor_raw, ',', '.')`.
+
+Comandos úteis `psql` para exportar resultados (exemplos)
+----------------------------------------------------
+- Exportar top 10 operadoras por total para CSV:
+
+```bash
+psql -d ans_teste -U postgres -c "\copy (SELECT razao_social, SUM(valor) AS total FROM despesas GROUP BY razao_social ORDER BY total DESC LIMIT 10) TO 'sql/results/top10.csv' WITH CSV DELIMITER ';' HEADER ENCODING 'UTF8'"
+```
+
+- Exportar por ano/trimestre:
+
+```bash
+psql -d ans_teste -U postgres -c "\copy (SELECT ano, trimestre, SUM(valor) FROM despesas GROUP BY ano, trimestre ORDER BY ano, trimestre) TO 'sql/results/por_trimestre.csv' WITH CSV DELIMITER ';' HEADER ENCODING 'UTF8'"
+```
+
+Validação dos CSVs exportados
+-----------------------------
+- Use os scripts em `sql/tools/` para verificar delimitador, encoding, número de colunas e somas básicas.
+- No Windows é comum usar PowerShell para abrir/inspecionar: `Import-Csv -Path sql/results/top10.csv -Delimiter ';' | Measure-Object -Property total -Sum`.
+
+Exemplos de transformações SQL (padrões)
+---------------------------------------
+- Normalizar CNPJ:
+
+```sql
+UPDATE consolidado_tmp
+SET cnpj_norm = regexp_replace(cnpj_raw, '[^0-9]', '', 'g');
+```
+
+- Converter valor para numeric:
+
+```sql
+UPDATE consolidado_tmp
+SET valor_num = replace(valor_raw, ',', '.')::numeric
+WHERE valor_raw ~ '^[0-9.,]+';
+```
+
+Checklist de execução (passo a passo)
+-----------------------------------
+1. Compilar Java: `javac -cp "lib/*;." *.java`
+2. (Opcional) Preparar DB: `psql -d ans_teste -f sql/01_create_tables.sql`
+3. Importar CSVs via DBeaver para `consolidado_tmp` e `operadoras`.
+4. Executar transformações SQL em `sql/02_import_data.sql`.
+5. Popular `despesas` a partir de staging (INSERTs filtrados/normalizados).
+6. Executar queries analíticas em `sql/03_query_analysis.sql`.
+7. Exportar resultados para `sql/results/` com `psql \copy` ou export do DBeaver.
+8. Rodar scripts de verificação em `sql/tools/`.
+
+Boas práticas e recomendações finais
+-----------------------------------
+- Sempre mantenha os arquivos de raw e `_raw` para auditar transformações.
+- Não recrie constraints até validar os dados importados; prefira criar índices apenas após validação.
+- Documente heurísticas de match (REG_ANS vs CNPJ vs RazaoSocial) em arquivos de auditoria.
+
+Onde editar/ajustar
+-------------------
+- `sql/01_create_tables.sql` — ajustar DDL se desejar campos adicionais.
+- `sql/02_import_data.sql` e `sql/teste3_pg.sql` — blocos de normalização e INSERTs.
+- `sql/03_query_analysis.sql` — queries finais para export.
+
+Suporte e próximos passos
 -------------------------
-- Executar as queries analíticas e exportar CSVs para `sql/results/`.
-- Revisar placeholders em `operadoras` e substituir por nomes reais quando possível.
-- Opcional: gerar `psql \copy` prontos para exportar relatórios automaticamente.
+Se desejar, eu posso:
+- Gerar comandos `psql \copy` para cada relatório e deixar prontos.
+- Criar um `README_SUMMARY.md` mais curto para avaliadores.
+- Criar um script para automatizar export para `sql/results/`.
 
-Contato/ajuda
-------------
-Se quiser que eu:
-- gere os comandos `psql \copy` para exportar automaticamente os relatórios para `sql/results/`, eu escrevo e deixo prontos;
-- rode um push das mudanças (commit + push), diga e eu executo;
-- crie um relatório final em CSV/JSON com os resultados das queries, eu preparo os comandos.
+Fim.
 
 ---
 
 Arquivos removidos: `README_UNIFIED.md`, `DOCUMENTACAO_SOLUCOES.md`, `sql/README.md`, `sql/README_test3.md` (foram consolidados aqui).
 
 Obrigado — se quiser que eu também crie um changelog ou tag de release, eu faço em seguida.
+````
