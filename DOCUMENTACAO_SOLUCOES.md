@@ -68,71 +68,71 @@ Recomendações futuras para robustez/eficiência (cenário real):
 - Implementar testes unitários para parsers e um pequeno conjunto de dados de integração com casos edge (quotes multilinha, campos com `;`).
 - Adicionar monitoramento/telemetria (tempo de execução por arquivo, contagem de erros) e logging estruturado.
 - Para conflitos de cadastro, adotar política (ex.: escolher registro mais recente, ou mesclar por regras) ou gerar arquivo para revisão manual.
- 
+
 10. Estratégia para CNPJs inválidos (escolha e implementação)
     - Problema: o arquivo consolidado contém CNPJs mal formatados, campos numéricos curtos (REG_ANS em vez de CNPJ) ou valores que não respeitam a máscara de 14 dígitos.
-    - Escolha adotada: *manter os registros*, marcar/extraí-los para auditoria e não descartá-los automaticamente. Implementação prática:
-       - Criei `ExtractInvalidCNPJ.java` que varre `consolidado_enriquecido_out.csv` e salva todas as linhas cujo campo `CNPJ` não valida como um CNPJ de 14 dígitos válidos (função `isValidCNPJ`). Resultado: `invalid_cnpj.csv`.
-       - Para o join/enriquecimento: se o campo `CNPJ` não for válido, o pipeline já tenta fallback por `REG_ANS` (quando possível). Se não houver match, o registro permanece no consolidado final com `RegistroANS;Modalidade;UF` em branco.
+    - Escolha adotada: _manter os registros_, marcar/extraí-los para auditoria e não descartá-los automaticamente. Implementação prática:
+      - Criei `ExtractInvalidCNPJ.java` que varre `consolidado_enriquecido_out.csv` e salva todas as linhas cujo campo `CNPJ` não valida como um CNPJ de 14 dígitos válidos (função `isValidCNPJ`). Resultado: `invalid_cnpj.csv`.
+      - Para o join/enriquecimento: se o campo `CNPJ` não for válido, o pipeline já tenta fallback por `REG_ANS` (quando possível). Se não houver match, o registro permanece no consolidado final com `RegistroANS;Modalidade;UF` em branco.
     - Racional/Justificativa:
-       - Preservar dados em vez de descartá-los evita perda de informação potencialmente recuperável por heurísticas ou revisão humana (ex.: corrigir formatação, identificar que o campo era REG_ANS).
-       - A extração em arquivo separado permite revisão manual e aplicação de heurísticas off-line (por analista), mantendo a pipeline auditável.
+      - Preservar dados em vez de descartá-los evita perda de informação potencialmente recuperável por heurísticas ou revisão humana (ex.: corrigir formatação, identificar que o campo era REG_ANS).
+      - A extração em arquivo separado permite revisão manual e aplicação de heurísticas off-line (por analista), mantendo a pipeline auditável.
     - Prós:
-       - Não perde potencial correspondência; mantém trilha auditável.
-       - Fácil de reprocessar após aplicar heurísticas ou correções manuais.
+      - Não perde potencial correspondência; mantém trilha auditável.
+      - Fácil de reprocessar após aplicar heurísticas ou correções manuais.
     - Contras:
-       - Mantém dados possivelmente sujos na saída principal (a agregação pode incluir valores sem RegistroANS); porém agregações por `RazaoSocial+UF` continuam válidas quando `RazaoSocial` e `UF` estiverem presentes.
-       - Requer esforço manual adicional para correção e revisão se muitas linhas estiverem inválidas.
+      - Mantém dados possivelmente sujos na saída principal (a agregação pode incluir valores sem RegistroANS); porém agregações por `RazaoSocial+UF` continuam válidas quando `RazaoSocial` e `UF` estiverem presentes.
+      - Requer esforço manual adicional para correção e revisão se muitas linhas estiverem inválidas.
     - Como rodar a extração de inválidos:
-       - Compilar:
-          ```bash
-          javac ExtractInvalidCNPJ.java
-          ```
-       - Executar:
-          ```bash
-          java ExtractInvalidCNPJ consolidado_enriquecido_out.csv invalid_cnpj.csv
-          ```
-       - `invalid_cnpj.csv` será gerado para revisão humana.
+      - Compilar:
+        ```bash
+        javac ExtractInvalidCNPJ.java
+        ```
+      - Executar:
+        ```bash
+        java ExtractInvalidCNPJ consolidado_enriquecido_out.csv invalid_cnpj.csv
+        ```
+      - `invalid_cnpj.csv` será gerado para revisão humana.
 
     - Observação sobre trade-off técnico: automatizar correção (fuzzy, heurísticas de padding, trocar REG_ANS por CNPJ) pode recuperar registros, mas aumenta risco de false-positives. Preferi a abordagem conservadora (preservar + auditar) para garantir integridade dos dados agregados.
 
 11. Heurísticas automáticas para registros sem match (implementação e resultados)
     - Objetivo: reduzir o número de registros no consolidado que não encontravam correspondência no cadastro de operadoras.
     - Estratégia aplicada (ordem executada):
-       1. Normalizar campo `CNPJ` removendo todos os caracteres não numéricos (apenas dígitos).
-       2. Se o campo contém entre 1 e 6 dígitos, tratá-lo como `REG_ANS` e procurar por `REGISTRO_OPERADORA` no cadastro.
-       3. Se o campo contém exatamente 14 dígitos, buscar por CNPJ no cadastro (match direto).
-       4. Se não houve match por CNPJ/REG_ANS, tentar `RazaoSocial` exata após normalização (remover pontuação, espaços extras e usar lower-case).
-       5. Se ainda sem match, executar correspondência fuzzy entre `RazaoSocial` do consolidado e das operadoras usando distância de Levenshtein; aceitar o melhor candidato quando a razão (distância / comprimento máximo) ≤ 0.25 (limiar conservador).
+      1.  Normalizar campo `CNPJ` removendo todos os caracteres não numéricos (apenas dígitos).
+      2.  Se o campo contém entre 1 e 6 dígitos, tratá-lo como `REG_ANS` e procurar por `REGISTRO_OPERADORA` no cadastro.
+      3.  Se o campo contém exatamente 14 dígitos, buscar por CNPJ no cadastro (match direto).
+      4.  Se não houve match por CNPJ/REG_ANS, tentar `RazaoSocial` exata após normalização (remover pontuação, espaços extras e usar lower-case).
+      5.  Se ainda sem match, executar correspondência fuzzy entre `RazaoSocial` do consolidado e das operadoras usando distância de Levenshtein; aceitar o melhor candidato quando a razão (distância / comprimento máximo) ≤ 0.25 (limiar conservador).
     - Implementação: classe `UnmatchedResolver.java` realiza o fluxo acima e produz dois artefatos:
-       - `unmatched_output_corrected.csv` — versão do consolidado com colunas `RegistroANS;Modalidade;UF` preenchidas quando heurística encontrou correspondência.
-       - `unmatched_output_heuristic_matches.csv` — relatório de auditoria por linha com a heurística usada e um `score` (0..1; para `byRegistro`/`byCNPJ`/`exactRazao` score=1.0, para `fuzzyRazao` score = razão normalizada).
+      - `unmatched_output_corrected.csv` — versão do consolidado com colunas `RegistroANS;Modalidade;UF` preenchidas quando heurística encontrou correspondência.
+      - `unmatched_output_heuristic_matches.csv` — relatório de auditoria por linha com a heurística usada e um `score` (0..1; para `byRegistro`/`byCNPJ`/`exactRazao` score=1.0, para `fuzzyRazao` score = razão normalizada).
     - Resultados obtidos na execução atual (dados de amostra):
-       - Total de linhas processadas: 239,832
-       - Resolvidos automaticamente: 238,478
-       - Ainda não resolvidos: 1,354
-       - Taxa de resolução: ~99.44%
+      - Total de linhas processadas: 239,832
+      - Resolvidos automaticamente: 238,478
+      - Ainda não resolvidos: 1,354
+      - Taxa de resolução: ~99.44%
     - Justificativa da escolha de heurísticas e limiar:
-       - Uso de `REG_ANS` como fallback é necessário porque alguns arquivos de origem colocavam esse código no campo onde esperávamos CNPJ; é um join natural e de baixa ambiguidade quando presente.
-       - Busca direta por CNPJ (14 dígitos) é determinística e preferida.
-       - Correspondência exata de razão normalizada recupera casos em que formatação/acentuação diferem mas o texto base é idêntico.
-       - Fuzzy (Levenshtein) com limiar 0.25 é uma escolha conservadora — reduz falsos positivos enquanto permite recuperar pequenas variações (typos, abreviações). O limiar foi escolhido empiricamente para este conjunto: pequeno o suficiente para evitar matches amplos, suficientemente alto para capturar variações menores.
+      - Uso de `REG_ANS` como fallback é necessário porque alguns arquivos de origem colocavam esse código no campo onde esperávamos CNPJ; é um join natural e de baixa ambiguidade quando presente.
+      - Busca direta por CNPJ (14 dígitos) é determinística e preferida.
+      - Correspondência exata de razão normalizada recupera casos em que formatação/acentuação diferem mas o texto base é idêntico.
+      - Fuzzy (Levenshtein) com limiar 0.25 é uma escolha conservadora — reduz falsos positivos enquanto permite recuperar pequenas variações (typos, abreviações). O limiar foi escolhido empiricamente para este conjunto: pequeno o suficiente para evitar matches amplos, suficientemente alto para capturar variações menores.
     - Prós desta abordagem:
-       - Alta taxa de recuperação automática (>=99% neste conjunto), reduzindo muito o trabalho manual.
-       - Geração de arquivo de auditoria permite revisão humana apenas nos casos restantes e naquelas heurísticas menos confiáveis (fuzzy).
+      - Alta taxa de recuperação automática (>=99% neste conjunto), reduzindo muito o trabalho manual.
+      - Geração de arquivo de auditoria permite revisão humana apenas nos casos restantes e naquelas heurísticas menos confiáveis (fuzzy).
     - Contras / riscos:
-       - Fuzzy matching ainda pode produzir false-positives; por isso todas as decisões automáticas são auditáveis e registradas no relatório.
-       - Dependência da qualidade do campo `RazaoSocial` — quando as razões forem muito diferentes, heurísticas falham.
+      - Fuzzy matching ainda pode produzir false-positives; por isso todas as decisões automáticas são auditáveis e registradas no relatório.
+      - Dependência da qualidade do campo `RazaoSocial` — quando as razões forem muito diferentes, heurísticas falham.
     - Recomendações operacionais:
-       - Revisar `unmatched_output_heuristic_matches.csv` filtrando por `heuristic=fuzzyRazao` e `score` próximo ao limiar (ex.: >0.15) para validação manual.
-       - Se for necessário um pipeline totalmente automático sem revisão humana, aumentar a robustez com regras adicionais (ex.: exigir UF igual, ou combinar múltiplas métricas de similaridade) e reduzir a aceitação de fuzzy.
+      - Revisar `unmatched_output_heuristic_matches.csv` filtrando por `heuristic=fuzzyRazao` e `score` próximo ao limiar (ex.: >0.15) para validação manual.
+      - Se for necessário um pipeline totalmente automático sem revisão humana, aumentar a robustez com regras adicionais (ex.: exigir UF igual, ou combinar múltiplas métricas de similaridade) e reduzir a aceitação de fuzzy.
     - Como rodar:
-       - Compilar:
-         ```bash
-         javac UnmatchedResolver.java
-         ```
-       - Executar (exemplo usado neste workspace):
-         ```bash
-         java UnmatchedResolver consolidado_enriquecido_out.csv dados_ans/Relatorio_cadop.csv unmatched_output
-         ```
-       - Saídas: `unmatched_output_corrected.csv`, `unmatched_output_heuristic_matches.csv`.
+      - Compilar:
+        ```bash
+        javac UnmatchedResolver.java
+        ```
+      - Executar (exemplo usado neste workspace):
+        ```bash
+        java UnmatchedResolver consolidado_enriquecido_out.csv dados_ans/Relatorio_cadop.csv unmatched_output
+        ```
+      - Saídas: `unmatched_output_corrected.csv`, `unmatched_output_heuristic_matches.csv`.

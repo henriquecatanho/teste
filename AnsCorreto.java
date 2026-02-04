@@ -4,9 +4,6 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.zip.*;
 
-/**
- * Consolida dados de Despesas com Eventos/Sinistros dos CSVs da ANS
- */
 public class AnsCorreto {
     
     private static final String INPUT_DIR = "dados_ans";
@@ -21,49 +18,45 @@ public class AnsCorreto {
     
     public static void main(String[] args) {
         try {
-            System.out.println("╔════════════════════════════════════════════════════╗");
-            System.out.println("║        CONSOLIDAÇÃO DE DADOS DE DESPESAS           ║");
-            System.out.println("╚════════════════════════════════════════════════════╝\n");
-            
+            System.out.println("Consolidação de dados de despesas");
+
             AnsCorreto consolidador = new AnsCorreto();
-            
-            System.out.println("📂 Buscando arquivos CSV...\n");
+
+            System.out.println("Buscando arquivos CSV...");
             List<File> csvs = consolidador.buscarCSVs();
             
             if (csvs.isEmpty()) {
-                System.out.println("❌ Nenhum CSV encontrado!");
+                System.out.println("Nenhum CSV encontrado.");
                 return;
             }
-            
-            System.out.println("✓ Encontrados " + csvs.size() + " arquivo(s):\n");
+
+            System.out.println("Encontrados " + csvs.size() + " arquivo(s):");
             for (File f : csvs) {
-                System.out.println("  • " + f.getName() + " (" + formatBytes(f.length()) + ")");
+                System.out.println("  " + f.getName() + " (" + formatBytes(f.length()) + ")");
             }
-            
-            System.out.println("\n📊 Processando dados...\n");
+
+            System.out.println("Processando dados...");
             List<RegistroDespesa> dados = consolidador.processarTodos(csvs);
             
-            System.out.println("\n✓ Total de registros extraídos: " + dados.size());
-            
-            System.out.println("\n🔍 Analisando inconsistências...\n");
+            System.out.println("Total de registros extraídos: " + dados.size());
+
+            System.out.println("Analisando inconsistências...");
             consolidador.analisarInconsistencias(dados);
-            
-            System.out.println("\n💾 Salvando arquivo consolidado...\n");
+
+            System.out.println("Salvando arquivo consolidado...");
             consolidador.salvarCSV(dados);
-            
-            System.out.println("📦 Compactando arquivo...\n");
+
+            System.out.println("Compactando arquivo...");
             consolidador.compactarArquivo();
-            
-            System.out.println("╔════════════════════════════════════════════════════╗");
-            System.out.println("║           CONSOLIDAÇÃO CONCLUÍDA!                  ║");
-            System.out.println("╚════════════════════════════════════════════════════╝");
-            
-            System.out.println("\n📝 Arquivos gerados:");
-            System.out.println("  • " + OUTPUT_FILE);
-            System.out.println("  • consolidado_despesas.zip");
+
+            System.out.println("Consolidação concluída.");
+
+            System.out.println("Arquivos gerados:");
+            System.out.println("  " + OUTPUT_FILE);
+            System.out.println("  consolidado_despesas.zip");
             
         } catch (Exception e) {
-            System.err.println("❌ ERRO: " + e.getMessage());
+            System.err.println("ERRO: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -108,9 +101,9 @@ public class AnsCorreto {
     List<RegistroDespesa> processarTodos(List<File> csvs) throws IOException {
         List<RegistroDespesa> todos = new ArrayList<>();
         for (File csv : csvs) {
-            System.out.println("  📄 Processando " + csv.getName() + "...");
+            System.out.println("  Processando " + csv.getName() + "...");
             List<RegistroDespesa> dados = processarCSV(csv);
-            System.out.println("     → " + dados.size() + " registros de despesas extraídos");
+            System.out.println("     " + dados.size() + " registros extraídos");
             todos.addAll(dados);
         }
         return todos;
@@ -166,11 +159,11 @@ public class AnsCorreto {
             cnpjsComMultiplasRazoes.computeIfAbsent(d.cnpj, k -> new HashSet<>()).add(d.razaoSocial);
         }
         int cnpjsDuplicados = (int) cnpjsComMultiplasRazoes.entrySet().stream().filter(e -> e.getValue().size() > 1).count();
-        System.out.println("📊 Estatísticas:");
-        System.out.println("  • Total de registros: " + dados.size());
-        System.out.println("  • Valores negativos: " + valoresNegativos);
-        System.out.println("  • Razões sociais vazias: " + razoesSociaisVazias);
-        System.out.println("  • REG_ANS com múltiplas descrições: " + cnpjsDuplicados);
+        System.out.println("Estatísticas:");
+        System.out.println("  Total de registros: " + dados.size());
+        System.out.println("  Valores negativos: " + valoresNegativos);
+        System.out.println("  Razões sociais vazias: " + razoesSociaisVazias);
+        System.out.println("  REG_ANS com múltiplas descrições: " + cnpjsDuplicados);
     }
     
     void salvarCSV(List<RegistroDespesa> dados) throws IOException {
@@ -179,7 +172,7 @@ public class AnsCorreto {
             for (RegistroDespesa d : dados) writer.write(d.toCSVLine() + "\n");
         }
         File arquivo = new File(OUTPUT_FILE);
-        System.out.println("  ✓ Arquivo salvo: " + OUTPUT_FILE + " (" + formatBytes(arquivo.length()) + ")");
+        System.out.println("Arquivo salvo: " + OUTPUT_FILE + " (" + formatBytes(arquivo.length()) + ")");
     }
     
     void compactarArquivo() throws IOException {
@@ -192,7 +185,7 @@ public class AnsCorreto {
             zos.closeEntry();
         }
         File arquivo = new File(zipFile);
-        System.out.println("  ✓ Arquivo compactado: " + zipFile + " (" + formatBytes(arquivo.length()) + ")");
+        System.out.println("Arquivo compactado: " + zipFile + " (" + formatBytes(arquivo.length()) + ")");
     }
     
     static String formatBytes(long bytes) {
