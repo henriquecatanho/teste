@@ -87,125 +87,107 @@ Obrigado pelo trabalho até aqui — os desafios foram reais, mas cada um deles 
 
 ```bash
 javac -cp "lib/*;." *.java
-````
+**ANS Simples — Teste 3 (unificado)**
 
-2. Rodar um teste rápido com sample (se presente):
+Resumo
+-------
+Conjunto de utilitários Java e scripts SQL para consolidar, validar, enriquecer e agregar dados de despesas (CSV) obtidos da ANS. Este README unifica a documentação do projeto e descreve passos reproduzíveis para rodar a análise localmente.
+
+Estrutura do repositório
+-------------------------
+- `*.java` : fontes Java (consolidador, transformações, enriquecimento, utilitários)
+- `csvs/` : CSVs de entrada de exemplo (pequenos)
+- `dados_ans/` : local esperado para `Relatorio_cadop.csv` (cadastro de operadoras)
+- `sql/` : DDL, scripts de importação, queries de análise e ferramentas auxiliares
+- `sql/tools/` : scripts para validação de export (PowerShell / Bash / Python)
+- `sample/` : exemplos pequenos para testes rápidos
+
+Pré-requisitos
+--------------
+- Java 17+ instalado
+- (Opcional) PostgreSQL local se quiser usar os scripts `sql/*.sql` com `psql`
+- DBeaver recomendado para import via GUI (Import Data)
+
+Rápido — testar com o sample
+---------------------------
+1. Compilar fontes:
 
 ```bash
-# usa um CSV pequeno em sample/consolidado_sample.csv
-java Agrupador sample/consolidado_sample.csv Teste_Sample
+javac -cp "lib/*;." *.java
 ```
 
-3. Resultados rápidos:
-
-- `Teste_Sample_despesas_agregadas.csv`
-
----
-
-## Executando a pipeline completa (se quiser rodar com dados reais)
-
-1. Baixar/colocar `Relatorio_cadop.csv` em `dados_ans/` (ou usar o script fornecido):
-
-```bash
-# exemplo para baixar (pode falhar dependendo de rede)
-curl -L -o dados_ans/Relatorio_cadop.csv "https://dadosabertos.ans.gov.br/FTP/PDA/operadoras_de_plano_de_saude_ativas/Relatorio_cadop.csv"
-```
-
-2. Rodar consolidator (gera `consolidado_despesas.csv`):
+2. Rodar o consolidador com o sample (gera `consolidado_despesas.csv`):
 
 ```bash
 java AnsCorreto
 ```
 
-3. Validar/transformar se desejar (opcional):
+Passos completos (pipeline local reproducível)
+--------------------------------------------
+1) Preparar banco (opcional, se usar SQL)
 
-```bash
-java Teste2Transformacao consolidado_despesas.csv consolidado_validado.csv despesas_agregadas.csv
-```
+- Em PostgreSQL execute `sql/01_create_tables.sql` para criar `operadoras` e `despesas`.
 
-4. Enriquecer com cadastro:
+2) Importar CSVs (DBeaver recomendado)
 
-```bash
-java EnriquecerOperadoras consolidado_despesas.csv dados_ans/Relatorio_cadop.csv consolidado_enriquecido_out.csv despesas_agregadas_temp.csv
-```
+- Use Import Data do DBeaver para carregar:
+	- `csvs/consolidado_sample.csv` → tabela de staging `consolidado_tmp`
+	- `csvs/Relatorio_cadop.csv` → tabela `operadoras` (ou `dados_ans/Relatorio_cadop.csv` via script)
+- Atenção ao mapear colunas — DBeaver pode renomear colunas automaticamente; confira as colunas `_raw` e ajuste antes de inserir.
 
-5. Agregar e ordenar (gera `Teste_<seu_nome>_despesas_agregadas.csv`):
+3) Normalizar e popular `despesas`
 
-```bash
-java Agrupador consolidado_enriquecido_out.csv Teste_SeuNome
-```
+- Execute os UPDATEs e INSERTs em `sql/02_import_data.sql` (ou use os blocos em `sql/teste3_pg.sql`) para:
+	- normalizar `CNPJ` (remover não-dígitos),
+	- converter `valor` (`replace(',', '.')` → cast numeric),
+	- filtrar contas de despesas (prefixos) e inserir em `despesas`.
 
-6. (Opcional) Heurísticas / auditoria:
+4) Análises
 
-```bash
-java UnmatchedResolver consolidado_enriquecido_out.csv dados_ans/Relatorio_cadop.csv unmatched_output
-java ExtractInvalidCNPJ consolidado_enriquecido_out.csv invalid_cnpj.csv
-```
+- Abra `sql/03_query_analysis.sql` ou `sql/03_query_analysis_simple.sql` e execute os blocos de consulta.
+- Exporte resultados via DBeaver (Export Result → CSV) para `sql/results/`.
 
----
+5) Validar exportações
 
-## O que o recrutador precisa para rodar (resumo)
+- Use os scripts em `sql/tools/` para checar formato e consistência dos CSVs exportados.
 
-- Ter `Java 17+` instalado
-- Compilar com `javac -cp "lib/*;." *.java` (ou usar `compilar.bat`)
-- Ter o CSV de cadastro em `dados_ans/Relatorio_cadop.csv` para enriquecimento completo (ou usar sample)
+Principais decisões e problemas conhecidos
+----------------------------------------
+- Falta de `psql`/Docker no ambiente do assistente: os scripts foram preparados para execução local.
+- Import via GUI pode requerer mapeamento manual de colunas.
+- CNPJs e campos numéricos precisaram de normalização; o pipeline preserva linhas inválidas em arquivos de auditoria para revisão manual.
 
----
+Onde estão os scripts importantes
+--------------------------------
+- `sql/01_create_tables.sql` — DDL mínimo
+- `sql/02_import_data*.sql` — exemplos e helpers para importar/transformar
+- `sql/teste3_pg.sql` — script completo com seções de transformação
+- `sql/03_query_analysis*.sql` — queries analíticas (top, por trimestre, por UF)
+- `sql/tools/` — validadores de export (PowerShell/Bash/Python)
 
-## Por que não commitei os CSVs grandes
+Limpeza de docs
+---------------
+Removi READMEs redundantes e consolidei a documentação principal neste `README.md`. Se quiser uma versão mais curta para avaliadores, eu gero uma `README_SUMMARY.md`.
 
-Arquivos consolidados e ZIPs são grandes e pesados — o repositório deve permanecer leve. O avaliador pode baixar os dados se quiser rodar tudo; forneci `sample/` para testes rápidos.
+Commits e push
+--------------
+Fiz alterações locais nesta branch; se quiser que eu dê push, confirme e eu realizo o commit + push (ou já posso empurrar as mudanças se preferir que eu use as credenciais locais).
 
----
+Próximos passos sugeridos
+-------------------------
+- Executar as queries analíticas e exportar CSVs para `sql/results/`.
+- Revisar placeholders em `operadoras` e substituir por nomes reais quando possível.
+- Opcional: gerar `psql \copy` prontos para exportar relatórios automaticamente.
 
-Se quiser, eu acrescento um `.gitignore` e um `sample/consolidado_sample.csv` com 5 linhas de exemplo, ou eu apenas atualizo com o que você preferir — diga se quer que eu crie o `sample/` agora.
-👉 Depois: `compilar.bat`
-
----
-
-## 🆚 Diferença para a versão Maven
-
-| Recurso             | Versão Maven | Versão Simples |
-| ------------------- | ------------ | -------------- |
-| Precisa Maven       | ✅ Sim       | ❌ Não         |
-| Precisa Spring Boot | ✅ Sim       | ❌ Não         |
-| API REST            | ✅ Sim       | ❌ Não         |
-| Processa CSV/XLSX   | ✅ Sim       | ⚠️ Básico      |
-| Facilidade          | ⭐⭐⭐       | ⭐⭐⭐⭐⭐     |
-
----
-
-## ✅ Checklist
-
-- [ ] Tenho Java 17+ instalado
-- [ ] Extraí a pasta `ans-simples`
-- [ ] Executei `compilar.bat`
-- [ ] Executei `executar.bat`
-- [ ] Vi os arquivos em `downloads/`
-- [ ] Vi os arquivos em `extracted/`
+Contato/ajuda
+------------
+Se quiser que eu:
+- gere os comandos `psql \copy` para exportar automaticamente os relatórios para `sql/results/`, eu escrevo e deixo prontos;
+- rode um push das mudanças (commit + push), diga e eu executo;
+- crie um relatório final em CSV/JSON com os resultados das queries, eu preparo os comandos.
 
 ---
 
-## 🎓 Próximos Passos
+Arquivos removidos: `README_UNIFIED.md`, `DOCUMENTACAO_SOLUCOES.md`, `sql/README.md`, `sql/README_test3.md` (foram consolidados aqui).
 
-Este programa faz a parte **mais difícil** do teste (conectar com ANS).
-
-Para completar o teste da Intuitive Care, você ainda precisa:
-
-- Processar os arquivos CSV/XLSX
-- Validar CNPJs
-- Consolidar dados
-- Criar banco de dados SQL
-- etc.
-
-Mas a integração com ANS está **FUNCIONANDO**! 🎉
-
----
-
-**VERSÃO SIMPLIFICADA - SEM MAVEN - APENAS JAVA**
-
-Desenvolvido para facilitar o teste técnico da Intuitive Care
-
-```
-
-```
+Obrigado — se quiser que eu também crie um changelog ou tag de release, eu faço em seguida.
